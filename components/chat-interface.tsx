@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { Send, Loader2 } from 'lucide-react'
+import { Send, Loader2, X } from 'lucide-react'
 
 interface Message {
   id: string
@@ -15,6 +15,8 @@ interface Message {
 interface ChatInterfaceProps {
   file: File | null
   onHighlight: (highlights: any[]) => void
+  onQuery?: () => void
+  onCloseChat?: () => void
 }
 
 // Function to find exact text matches in the contract for highlighting with better page detection
@@ -155,11 +157,14 @@ function extractKeyPhrasesForHighlighting(response: string, question: string): s
   return phrases
 }
 
-export function ChatInterface({ file, onHighlight }: ChatInterfaceProps) {
+export function ChatInterface({ file, onHighlight, onQuery, onCloseChat }: ChatInterfaceProps) {
   const [contractText, setContractText] = useState<string>('')
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [isMessagesVisible, setIsMessagesVisible] = useState(true)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
 
   // Extract contract text when file changes
   useEffect(() => {
@@ -177,9 +182,27 @@ export function ChatInterface({ file, onHighlight }: ChatInterfaceProps) {
     }
   }, [file])
 
+  // Auto-scroll to bottom when messages change
+  useEffect(() => {
+    if (messages.length > 0 && isMessagesVisible) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
+  }, [messages, isMessagesVisible])
+
+  // Show messages when a new message is added
+  useEffect(() => {
+    if (messages.length > 0) {
+      setIsMessagesVisible(true)
+    }
+  }, [messages.length])
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     if (!input.trim() || !contractText || isLoading) return
+
+    // Show messages area when submitting a query
+    setIsMessagesVisible(true)
+    onQuery?.()
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -317,38 +340,59 @@ export function ChatInterface({ file, onHighlight }: ChatInterfaceProps) {
     setInput(e.target.value)
   }
 
+  const handleCloseMessages = () => {
+    setIsMessagesVisible(false)
+  }
+
   return (
     <div className="absolute bottom-0 left-0 right-0 bg-white border-t border-gray-200">
-      {/* Messages - Only show when there are messages */}
-      {messages.length > 0 && (
-        <div className="max-h-80 overflow-y-auto p-4 border-b border-gray-200">
-          <div className="space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
+      {/* Messages Area - Only show when there are messages AND isMessagesVisible is true */}
+      {messages.length > 0 && isMessagesVisible && (
+        <div className="relative">
+          {/* Close Button - Only show when messages are visible */}
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleCloseMessages}
+            className="absolute top-2 right-2 z-10 h-6 w-6 p-0 hover:bg-gray-100"
+          >
+            <X className="h-3 w-3" />
+          </Button>
+          
+          {/* Messages */}
+          <div 
+            ref={messagesContainerRef}
+            className="max-h-80 overflow-y-auto p-4 border-b border-gray-200 pt-8"
+          >
+            <div className="space-y-4">
+              {messages.map((message) => (
                 <div
-                  className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
-                    message.role === 'user'
-                      ? 'bg-blue-600 text-white'
-                      : 'bg-gray-100 text-gray-900'
-                  }`}
+                  key={message.id}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
-                  {message.content || (message.role === 'assistant' && isLoading ? (
-                    <div className="flex items-center gap-2">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>Analyzing contract...</span>
-                    </div>
-                  ) : message.content)}
+                  <div
+                    className={`max-w-[80%] rounded-lg px-3 py-2 text-sm ${
+                      message.role === 'user'
+                        ? 'bg-blue-600 text-white'
+                        : 'bg-gray-100 text-gray-900'
+                    }`}
+                  >
+                    {message.content || (message.role === 'assistant' && isLoading ? (
+                      <div className="flex items-center gap-2">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        <span>Analyzing contract...</span>
+                      </div>
+                    ) : message.content)}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+              <div ref={messagesEndRef} />
+            </div>
           </div>
         </div>
       )}
 
-      {/* Input */}
+      {/* Input - Always visible */}
       <div className="p-4">
         <form onSubmit={handleSubmit} className="flex gap-2">
           <Input

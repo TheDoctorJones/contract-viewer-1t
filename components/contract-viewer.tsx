@@ -24,6 +24,7 @@ export function ContractViewer() {
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [hideChat, setHideChat] = useState(false)
   const [contractStatus, setContractStatus] = useState<string>('')
+  const [isChatVisible, setIsChatVisible] = useState(true)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -95,6 +96,14 @@ export function ContractViewer() {
       link.click()
       document.body.removeChild(link)
     }
+  }
+
+  const handleCloseChat = () => {
+    setIsChatVisible(false)
+  }
+
+  const handleShowChat = () => {
+    setIsChatVisible(true)
   }
 
   return (
@@ -197,9 +206,20 @@ export function ContractViewer() {
         {!hideChat && (
           <div className="w-96 bg-white border-r border-gray-200 relative h-full chat-interface">
             <div className="h-full overflow-y-auto pb-20">
-              <ContractDetails file={file} onHighlight={addHighlights} onStatusUpdate={handleStatusUpdate} />
+              <ContractDetails 
+                file={file} 
+                onHighlight={addHighlights} 
+                onStatusUpdate={handleStatusUpdate}
+              />
             </div>
-            <ChatInterface file={file} onHighlight={addHighlights} />
+            {isChatVisible && (
+              <ChatInterface 
+                file={file} 
+                onHighlight={addHighlights} 
+                onQuery={handleShowChat}
+                onCloseChat={handleCloseChat}
+              />
+            )}
           </div>
         )}
 

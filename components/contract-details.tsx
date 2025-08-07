@@ -1,31 +1,31 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
-import { Separator } from '@/components/ui/separator'
-import { Edit2, Check, X, Loader2, AlertTriangle, ExternalLink } from 'lucide-react'
-import { extractTextFromPDF } from '@/utils/pdf-text-extractor'
+import React, { useState, useEffect } from 'react';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Separator } from '@/components/ui/separator';
+import { Edit2, Check, X, Loader2, AlertTriangle, ExternalLink } from 'lucide-react';
+import { extractTextFromPDF } from '@/utils/pdf-text-extractor';
 
 interface ContractDetailsProps {
-  file: File | null
-  onHighlight: (highlights: any[]) => void
-  onStatusUpdate: (status: string) => void
+  file: File | null;
+  onHighlight: (highlights: any[]) => void;
+  onStatusUpdate: (status: string) => void;
 }
 
 interface KeyTerm {
-  term: string
-  value: string | string[]
+  term: string;
+  value: string | string[];
 }
 
 // Agreement types from your schema
 const AGREEMENT_TYPES = [
   'Master Service Agreement',
-  'Non-Disclosure Agreement', 
+  'Non-Disclosure Agreement',
   'Statement of Work',
   'License Agreement',
   'Services Agreement',
@@ -65,13 +65,13 @@ const AGREEMENT_TYPES = [
   'Stock Purchase Agreement',
   'Subscription Agreement',
   'Termination Agreement'
-]
+];
 
 // Contract attributes that will be extracted
 const CONTRACT_ATTRIBUTES = [
   'Status',
   'Contract Value',
-  'Term Length', 
+  'Term Length',
   'Termination Notice Period',
   'Governing Law',
   'Payment Terms',
@@ -85,44 +85,44 @@ const CONTRACT_ATTRIBUTES = [
   'Jurisdiction',
   'Force Majeure',
   'Amendment Process'
-]
+];
 
 export function ContractDetails({ file, onHighlight, onStatusUpdate }: ContractDetailsProps) {
-  const [agreementType, setAgreementType] = useState<string>('')
-  const [isEditingType, setIsEditingType] = useState(false)
-  const [summary, setSummary] = useState<string>('')
-  const [keyTerms, setKeyTerms] = useState<KeyTerm[]>([])
-  const [attributes, setAttributes] = useState<Record<string, string>>({})
-  const [editingAttribute, setEditingAttribute] = useState<string | null>(null)
-  const [editValue, setEditValue] = useState<string>('')
-  const [isAnalyzing, setIsAnalyzing] = useState(false)
-  const [contractText, setContractText] = useState<string>('')
-  const [error, setError] = useState<any>(null)
+  const [agreementType, setAgreementType] = useState<string>('');
+  const [isEditingType, setIsEditingType] = useState(false);
+  const [summary, setSummary] = useState<string>('');
+  const [keyTerms, setKeyTerms] = useState<KeyTerm[]>([]);
+  const [attributes, setAttributes] = useState<Record<string, string>>({});
+  const [editingAttribute, setEditingAttribute] = useState<string | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [contractText, setContractText] = useState<string>('');
+  const [error, setError] = useState<any>(null);
 
   // Analyze contract when file changes
   useEffect(() => {
     if (file) {
-      analyzeContract(file)
+      analyzeContract(file);
     } else {
       // Reset state when no file
-      setAgreementType('')
-      setSummary('')
-      setKeyTerms([])
-      setAttributes({})
-      setContractText('')
-      setError(null)
-      onStatusUpdate('') // Clear status in parent
+      setAgreementType('');
+      setSummary('');
+      setKeyTerms([]);
+      setAttributes({});
+      setContractText('');
+      setError(null);
+      onStatusUpdate(''); // Clear status in parent
     }
-  }, [file])
+  }, [file]);
 
   const analyzeContract = async (file: File) => {
-    setIsAnalyzing(true)
-    setError(null)
-    
+    setIsAnalyzing(true);
+    setError(null);
+
     try {
       // Extract text from PDF
-      const text = await extractTextFromPDF(file)
-      setContractText(text)
+      const text = await extractTextFromPDF(file);
+      setContractText(text);
 
       // Use the enhanced OpenAI API
       const response = await fetch('/api/analyze-contract', {
@@ -132,167 +132,164 @@ export function ContractDetails({ file, onHighlight, onStatusUpdate }: ContractD
         },
         body: JSON.stringify({
           contractText: text,
-          agreementType: agreementType
+          agreementType: agreementType,
         }),
-      })
+      });
 
-      const data = await response.json()
+      const data = await response.json();
 
       if (!response.ok) {
-        console.error('Analysis failed:', data)
-        setError(data)
-        setSummary('Analysis failed. See error details below.')
-        setKeyTerms([])
-        return
+        console.error('Analysis failed:', data);
+        setError(data);
+        setSummary('Analysis failed. See error details below.');
+        setKeyTerms([]);
+        return;
       }
-      
-      console.log('Analysis response:', data)
-      
+
+      console.log('Analysis response:', data);
+
       // Update state with analysis
-      setSummary(data.summary)
-      setAgreementType(data.detectedType || 'Master Service Agreement')
-      
+      setSummary(data.summary);
+      setAgreementType(data.detectedType || 'Master Service Agreement');
+
       // Set attributes directly from the API response
       if (data.attributes) {
-        console.log('Setting attributes:', data.attributes)
-        setAttributes(data.attributes)
-        
+        console.log('Setting attributes:', data.attributes);
+        setAttributes(data.attributes);
+
         // Calculate contract status based on dates
         const calculateContractStatus = (effectiveDate: string, expirationDate: string): string => {
           if (effectiveDate === 'Not specified' || expirationDate === 'Not specified') {
-            return 'Unknown'
+            return 'Unknown';
           }
-          
-          const today = new Date()
-          const effective = new Date(effectiveDate)
-          const expiration = new Date(expirationDate)
-          
+
+          const today = new Date();
+          const effective = new Date(effectiveDate);
+          const expiration = new Date(expirationDate);
+
           // Check if dates are valid
           if (isNaN(effective.getTime()) || isNaN(expiration.getTime())) {
-            return 'Unknown'
+            return 'Unknown';
           }
-          
+
           if (today < effective) {
-            return 'Pending'
+            return 'Pending';
           } else if (today > expiration) {
-            return 'Expired'
+            return 'Expired';
           } else {
-            return 'Active'
+            return 'Active';
           }
-        }
+        };
 
         // Calculate status and add to attributes
         const contractStatus = calculateContractStatus(
           data.attributes['Effective Date'] || 'Not specified',
           data.attributes['Expiration Date'] || 'Not specified'
-        )
-        data.attributes['Status'] = contractStatus
+        );
+        data.attributes['Status'] = contractStatus;
 
         // Update parent component with status
-        onStatusUpdate(contractStatus)
-        
+        onStatusUpdate(contractStatus);
+
         // Convert attributes to key terms for the Key Terms section
         // Show the most business-critical information
         const extractedKeyTerms: KeyTerm[] = [
-          { term: 'Type', value: data.detectedType || 'Master Service Agreement' }
-        ]
+          { term: 'Type', value: data.detectedType || 'Master Service Agreement' },
+        ];
 
         // Combine parties into a single entry
-        const parties: string[] = []
+        const parties: string[] = [];
         if (data.attributes['Party 1'] && data.attributes['Party 1'] !== 'Not specified') {
-          parties.push(data.attributes['Party 1'])
+          parties.push(data.attributes['Party 1']);
         }
         if (data.attributes['Party 2'] && data.attributes['Party 2'] !== 'Not specified') {
-          parties.push(data.attributes['Party 2'])
+          parties.push(data.attributes['Party 2']);
         }
 
         if (parties.length > 0) {
-          extractedKeyTerms.push({ term: 'Parties', value: parties })
+          extractedKeyTerms.push({ term: 'Parties', value: parties });
         }
-
-        // Remove the Status addition here - it's now in the title bar
 
         // Add essential business-critical attributes in priority order
         const priorityAttributes = [
           'Contract Value',
-          'Term Length', 
+          'Term Length',
           'Effective Date',
           'Expiration Date',
           'Payment Terms',
-          'Termination Notice Period'
-        ]
+          'Termination Notice Period',
+        ];
 
         priorityAttributes.forEach(attr => {
           if (data.attributes[attr] && data.attributes[attr] !== 'Not specified') {
-            extractedKeyTerms.push({ term: attr, value: data.attributes[attr] })
+            extractedKeyTerms.push({ term: attr, value: data.attributes[attr] });
           }
-        })
+        });
 
-        setKeyTerms(extractedKeyTerms.slice(0, 8)) // Show up to 8 key terms (removed Status)
+        setKeyTerms(extractedKeyTerms.slice(0, 8)); // Show up to 8 key terms
       } else {
         // Fallback: initialize with empty values
-        const initialAttributes: Record<string, string> = {}
+        const initialAttributes: Record<string, string> = {};
         CONTRACT_ATTRIBUTES.forEach(attr => {
-          initialAttributes[attr] = 'Not specified'
-        })
-        setAttributes(initialAttributes)
-        setKeyTerms([{ term: 'Type', value: agreementType || 'Not specified' }])
+          initialAttributes[attr] = 'Not specified';
+        });
+        setAttributes(initialAttributes);
+        setKeyTerms([{ term: 'Type', value: agreementType || 'Not specified' }]);
       }
-
     } catch (error) {
-      console.error('Error analyzing contract:', error)
-      setError({ error: 'Network or parsing error', details: error instanceof Error ? error.message : String(error) })
-      setSummary('Error analyzing contract. Please try again.')
-      setKeyTerms([])
+      console.error('Error analyzing contract:', error);
+      setError({ error: 'Network or parsing error', details: error instanceof Error ? error.message : String(error) });
+      setSummary('Error analyzing contract. Please try again.');
+      setKeyTerms([]);
     } finally {
-      setIsAnalyzing(false)
+      setIsAnalyzing(false);
     }
-  }
+  };
 
   const handleAttributeEdit = (key: string, value: string) => {
-    setEditingAttribute(key)
-    setEditValue(value)
-  }
+    setEditingAttribute(key);
+    setEditValue(value);
+  };
 
   const saveAttributeEdit = () => {
     if (editingAttribute) {
       setAttributes(prev => ({
         ...prev,
-        [editingAttribute]: editValue
-      }))
+        [editingAttribute]: editValue,
+      }));
     }
-    setEditingAttribute(null)
-    setEditValue('')
-  }
+    setEditingAttribute(null);
+    setEditValue('');
+  };
 
   const cancelAttributeEdit = () => {
-    setEditingAttribute(null)
-    setEditValue('')
-  }
+    setEditingAttribute(null);
+    setEditValue('');
+  };
 
   const handleAgreementTypeChange = (newType: string) => {
-    setAgreementType(newType)
-    setIsEditingType(false)
-    
+    setAgreementType(newType);
+    setIsEditingType(false);
+
     // Update the Type in key terms
-    setKeyTerms(prev => prev.map(term => 
-      term.term === 'Type' 
+    setKeyTerms(prev => prev.map(term =>
+      term.term === 'Type'
         ? { ...term, value: newType }
         : term
-    ))
-    
+    ));
+
     // Re-analyze with new agreement type if we have contract text
     if (contractText && file) {
-      analyzeContract(file)
+      analyzeContract(file);
     }
-  }
+  };
 
   if (!file) {
     return (
       <div className="p-6 text-center text-gray-500">
         <p>Upload a contract to view details</p>
       </div>
-    )
+    );
   }
 
   return (
@@ -313,7 +310,7 @@ export function ContractDetails({ file, onHighlight, onStatusUpdate }: ContractD
                   <p className="text-red-700">
                     Your OpenAI API key has exceeded its quota. This confirms your API key is being used correctly.
                   </p>
-                  
+
                   {error.apiKeyInfo && (
                     <div className="bg-red-100 p-3 rounded">
                       <strong>API Key Info:</strong>
@@ -324,7 +321,7 @@ export function ContractDetails({ file, onHighlight, onStatusUpdate }: ContractD
                       </ul>
                     </div>
                   )}
-                  
+
                   <div>
                     <strong>Next steps:</strong>
                     <ul className="mt-1 space-y-1 text-xs list-disc list-inside">
@@ -333,18 +330,18 @@ export function ContractDetails({ file, onHighlight, onStatusUpdate }: ContractD
                       ))}
                     </ul>
                   </div>
-                  
+
                   <div className="flex gap-2">
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       variant="outline"
                       onClick={() => window.open('https://platform.openai.com/usage', '_blank')}
                     >
                       <ExternalLink className="h-3 w-3 mr-1" />
                       Check Usage
                     </Button>
-                    <Button 
-                      size="sm" 
+                    <Button
+                      size="sm"
                       variant="outline"
                       onClick={() => window.open('https://platform.openai.com/account/billing', '_blank')}
                     >
@@ -390,7 +387,7 @@ export function ContractDetails({ file, onHighlight, onStatusUpdate }: ContractD
               <p className="text-sm text-gray-700 leading-relaxed">
                 {summary || 'AI analysis will appear here after processing the contract.'}
               </p>
-              
+
               {/* Key Terms */}
               {keyTerms.length > 0 && (
                 <div className="space-y-3 pt-2 border-t border-gray-100">
@@ -499,5 +496,5 @@ export function ContractDetails({ file, onHighlight, onStatusUpdate }: ContractD
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }

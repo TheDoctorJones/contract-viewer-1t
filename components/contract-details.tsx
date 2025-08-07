@@ -14,6 +14,7 @@ import { extractTextFromPDF } from '@/utils/pdf-text-extractor'
 interface ContractDetailsProps {
   file: File | null
   onHighlight: (highlights: any[]) => void
+  onStatusUpdate: (status: string) => void
 }
 
 interface KeyTerm {
@@ -86,7 +87,7 @@ const CONTRACT_ATTRIBUTES = [
   'Amendment Process'
 ]
 
-export function ContractDetails({ file, onHighlight }: ContractDetailsProps) {
+export function ContractDetails({ file, onHighlight, onStatusUpdate }: ContractDetailsProps) {
   const [agreementType, setAgreementType] = useState<string>('')
   const [isEditingType, setIsEditingType] = useState(false)
   const [summary, setSummary] = useState<string>('')
@@ -110,6 +111,7 @@ export function ContractDetails({ file, onHighlight }: ContractDetailsProps) {
       setAttributes({})
       setContractText('')
       setError(null)
+      onStatusUpdate('') // Clear status in parent
     }
   }, [file])
 
@@ -185,6 +187,9 @@ export function ContractDetails({ file, onHighlight }: ContractDetailsProps) {
           data.attributes['Expiration Date'] || 'Not specified'
         )
         data.attributes['Status'] = contractStatus
+
+        // Update parent component with status
+        onStatusUpdate(contractStatus)
         
         // Convert attributes to key terms for the Key Terms section
         // Show the most business-critical information
@@ -205,10 +210,7 @@ export function ContractDetails({ file, onHighlight }: ContractDetailsProps) {
           extractedKeyTerms.push({ term: 'Parties', value: parties })
         }
 
-        // Add Status after Parties
-        if (data.attributes['Status']) {
-          extractedKeyTerms.push({ term: 'Status', value: data.attributes['Status'] })
-        }
+        // Remove the Status addition here - it's now in the title bar
 
         // Add essential business-critical attributes in priority order
         const priorityAttributes = [
@@ -226,7 +228,7 @@ export function ContractDetails({ file, onHighlight }: ContractDetailsProps) {
           }
         })
 
-        setKeyTerms(extractedKeyTerms.slice(0, 9)) // Show up to 9 key terms including Type, Parties, and Status
+        setKeyTerms(extractedKeyTerms.slice(0, 8)) // Show up to 8 key terms (removed Status)
       } else {
         // Fallback: initialize with empty values
         const initialAttributes: Record<string, string> = {}
@@ -474,9 +476,13 @@ export function ContractDetails({ file, onHighlight }: ContractDetailsProps) {
                   </div>
                 ) : (
                   <div className="flex justify-between items-center group">
-                    <span className={`text-sm ${attributes[key] === 'Not specified' ? 'text-gray-400' : 'text-gray-900'}`}>
-                      {attributes[key] || 'Not specified'}
-                    </span>
+                    {attributes[key] === 'Not specified' || !attributes[key] ? (
+                      <span className="text-sm text-gray-400">Not specified</span>
+                    ) : (
+                      <Badge variant="secondary" className="text-xs">
+                        {attributes[key]}
+                      </Badge>
+                    )}
                     <Button
                       size="sm"
                       variant="ghost"

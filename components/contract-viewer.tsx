@@ -7,6 +7,7 @@ import { Upload, ChevronUp, ChevronDown, ExternalLink, Download, FileText } from
 import { PDFViewer } from './pdf-viewer'
 import { ContractDetails } from './contract-details'
 import { ChatInterface } from './chat-interface'
+import { Badge } from '@/components/ui/badge'
 
 interface HighlightInstance {
   id: string
@@ -22,6 +23,7 @@ export function ContractViewer() {
   const [currentHighlight, setCurrentHighlight] = useState<number>(-1)
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [hideChat, setHideChat] = useState(false)
+  const [contractStatus, setContractStatus] = useState<string>('')
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
@@ -46,6 +48,7 @@ export function ContractViewer() {
       setDocumentTitle(uploadedFile.name.replace('.pdf', ''))
       setHighlights([])
       setCurrentHighlight(-1)
+      setContractStatus('')
       
       // Clean up previous URL
       if (pdfUrl) {
@@ -71,6 +74,10 @@ export function ContractViewer() {
   const addHighlights = (newHighlights: HighlightInstance[]) => {
     setHighlights(newHighlights)
     setCurrentHighlight(newHighlights.length > 0 ? 0 : -1)
+  }
+
+  const handleStatusUpdate = (status: string) => {
+    setContractStatus(status)
   }
 
   const openPdfInNewTab = () => {
@@ -99,6 +106,19 @@ export function ContractViewer() {
           <h1 className="text-xl font-semibold text-gray-900 truncate max-w-md">
             {documentTitle}
           </h1>
+          {contractStatus && contractStatus !== 'Unknown' && (
+            <Badge 
+              variant={
+                contractStatus === 'Active' ? 'default' : 
+                contractStatus === 'Expired' ? 'destructive' : 
+                contractStatus === 'Pending' ? 'secondary' : 
+                'outline'
+              }
+              className="text-xs"
+            >
+              {contractStatus}
+            </Badge>
+          )}
         </div>
         
         <div className="flex items-center gap-4">
@@ -177,7 +197,7 @@ export function ContractViewer() {
         {!hideChat && (
           <div className="w-96 bg-white border-r border-gray-200 relative h-full chat-interface">
             <div className="h-full overflow-y-auto pb-20">
-              <ContractDetails file={file} onHighlight={addHighlights} />
+              <ContractDetails file={file} onHighlight={addHighlights} onStatusUpdate={handleStatusUpdate} />
             </div>
             <ChatInterface file={file} onHighlight={addHighlights} />
           </div>

@@ -68,6 +68,7 @@ const AGREEMENT_TYPES = [
 
 // Contract attributes that will be extracted
 const CONTRACT_ATTRIBUTES = [
+  'Status',
   'Contract Value',
   'Term Length', 
   'Termination Notice Period',
@@ -154,12 +155,43 @@ export function ContractDetails({ file, onHighlight }: ContractDetailsProps) {
         console.log('Setting attributes:', data.attributes)
         setAttributes(data.attributes)
         
+        // Calculate contract status based on dates
+        const calculateContractStatus = (effectiveDate: string, expirationDate: string): string => {
+          if (effectiveDate === 'Not specified' || expirationDate === 'Not specified') {
+            return 'Unknown'
+          }
+          
+          const today = new Date()
+          const effective = new Date(effectiveDate)
+          const expiration = new Date(expirationDate)
+          
+          // Check if dates are valid
+          if (isNaN(effective.getTime()) || isNaN(expiration.getTime())) {
+            return 'Unknown'
+          }
+          
+          if (today < effective) {
+            return 'Pending'
+          } else if (today > expiration) {
+            return 'Expired'
+          } else {
+            return 'Active'
+          }
+        }
+
+        // Calculate status and add to attributes
+        const contractStatus = calculateContractStatus(
+          data.attributes['Effective Date'] || 'Not specified',
+          data.attributes['Expiration Date'] || 'Not specified'
+        )
+        data.attributes['Status'] = contractStatus
+        
         // Convert attributes to key terms for the Key Terms section
-        // Start with Type as the first key term
+        // Show the most business-critical information
         const extractedKeyTerms: KeyTerm[] = [
           { term: 'Type', value: data.detectedType || 'Master Service Agreement' }
         ]
-        
+
         // Combine parties into a single entry
         const parties: string[] = []
         if (data.attributes['Party 1'] && data.attributes['Party 1'] !== 'Not specified') {
@@ -168,20 +200,33 @@ export function ContractDetails({ file, onHighlight }: ContractDetailsProps) {
         if (data.attributes['Party 2'] && data.attributes['Party 2'] !== 'Not specified') {
           parties.push(data.attributes['Party 2'])
         }
-        
+
         if (parties.length > 0) {
           extractedKeyTerms.push({ term: 'Parties', value: parties })
         }
-        
-        // Add other key attributes (limit to top 4 additional terms after Type and Parties)
-        const priorityAttributes = ['Contract Value', 'Term Length', 'Payment Terms', 'Effective Date']
+
+        // Add Status after Parties
+        if (data.attributes['Status']) {
+          extractedKeyTerms.push({ term: 'Status', value: data.attributes['Status'] })
+        }
+
+        // Add essential business-critical attributes in priority order
+        const priorityAttributes = [
+          'Contract Value',
+          'Term Length', 
+          'Effective Date',
+          'Expiration Date',
+          'Payment Terms',
+          'Termination Notice Period'
+        ]
+
         priorityAttributes.forEach(attr => {
           if (data.attributes[attr] && data.attributes[attr] !== 'Not specified') {
             extractedKeyTerms.push({ term: attr, value: data.attributes[attr] })
           }
         })
-        
-        setKeyTerms(extractedKeyTerms.slice(0, 6)) // Show top 6 including Type and Parties
+
+        setKeyTerms(extractedKeyTerms.slice(0, 9)) // Show up to 9 key terms including Type, Parties, and Status
       } else {
         // Fallback: initialize with empty values
         const initialAttributes: Record<string, string> = {}

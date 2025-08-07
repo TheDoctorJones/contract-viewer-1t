@@ -433,7 +433,7 @@ async function extractAllAttributes(contractText: string): Promise<Record<string
   return attributes
 }
 
-// Ask a targeted question about the contract (same approach as chat)
+// Ask a targeted question about the contract with retry logic and better error handling
 async function askTargetedQuestion(contractText: string, question: string): Promise<string | null> {
   const prompt = `Based on this contract, answer the following question. Be concise and specific. If the information is not found, respond with "Not found".
 
@@ -444,43 +444,84 @@ QUESTION: ${question}
 
 ANSWER:`
 
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 100, // Reduced for more concise responses
-        temperature: 0.1
+  const maxRetries = 3
+  let lastError: Error | null = null
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Attempt ${attempt} for question: ${question.substring(0, 50)}...`)
+      
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          max_tokens: 100,
+          temperature: 0.1
+        })
       })
-    })
 
-    if (!response.ok) {
-      console.error('OpenAI API error:', response.status)
-      return null
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`OpenAI API error (attempt ${attempt}):`, response.status, errorText)
+        
+        // Handle specific error codes
+        if (response.status === 503) {
+          lastError = new Error(`OpenAI service temporarily unavailable (503). Attempt ${attempt}/${maxRetries}`)
+          if (attempt < maxRetries) {
+            // Wait before retrying (exponential backoff)
+            const waitTime = Math.pow(2, attempt) * 1000
+            console.log(`Waiting ${waitTime}ms before retry...`)
+            await new Promise(resolve => setTimeout(resolve, waitTime))
+            continue
+          }
+        } else if (response.status === 429) {
+          lastError = new Error(`OpenAI rate limit exceeded (429). Attempt ${attempt}/${maxRetries}`)
+          if (attempt < maxRetries) {
+            const waitTime = Math.pow(2, attempt) * 2000 // Longer wait for rate limits
+            console.log(`Rate limited, waiting ${waitTime}ms before retry...`)
+            await new Promise(resolve => setTimeout(resolve, waitTime))
+            continue
+          }
+        } else {
+          lastError = new Error(`OpenAI API error: ${response.status} - ${errorText}`)
+          break // Don't retry for other errors
+        }
+      } else {
+        const data = await response.json()
+        const answer = data.choices[0]?.message?.content?.trim()
+        
+        if (!answer || answer.toLowerCase().includes('not found') || answer.toLowerCase().includes('not specified')) {
+          return null
+        }
+        
+        console.log(`Successfully got answer (attempt ${attempt}): ${answer.substring(0, 50)}...`)
+        return answer
+      }
+    } catch (error) {
+      console.error(`Network error on attempt ${attempt}:`, error)
+      lastError = error instanceof Error ? error : new Error(String(error))
+      
+      if (attempt < maxRetries) {
+        const waitTime = Math.pow(2, attempt) * 1000
+        console.log(`Network error, waiting ${waitTime}ms before retry...`)
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+        continue
+      }
     }
-
-    const data = await response.json()
-    const answer = data.choices[0]?.message?.content?.trim()
-    
-    if (!answer || answer.toLowerCase().includes('not found') || answer.toLowerCase().includes('not specified')) {
-      return null
-    }
-    
-    return answer
-  } catch (error) {
-    console.error('Error in targeted question:', error)
-    return null
   }
+
+  // If all retries failed, throw the last error
+  throw lastError || new Error('All retry attempts failed')
 }
 
 // Get summary and agreement type with much more focused instructions
@@ -506,48 +547,75 @@ Respond in this format:
 SUMMARY: [your concise, specific summary - max 2 sentences]
 TYPE: [agreement type]`
 
-  try {
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [
-          {
-            role: 'user',
-            content: prompt
-          }
-        ],
-        max_tokens: 200, // Reduced for more concise responses
-        temperature: 0.1
-      })
-    })
+  const maxRetries = 3
+  let lastError: Error | null = null
 
-    if (!response.ok) {
-      return {
-        summary: 'Contract analysis completed',
-        agreementType: 'Services Agreement'
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`Getting summary and type (attempt ${attempt})...`)
+      
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'gpt-3.5-turbo',
+          messages: [
+            {
+              role: 'user',
+              content: prompt
+            }
+          ],
+          max_tokens: 200,
+          temperature: 0.1
+        })
+      })
+
+      if (!response.ok) {
+        const errorText = await response.text()
+        console.error(`OpenAI API error for summary (attempt ${attempt}):`, response.status, errorText)
+        
+        if (response.status === 503 || response.status === 429) {
+          lastError = new Error(`OpenAI service error (${response.status}). Attempt ${attempt}/${maxRetries}`)
+          if (attempt < maxRetries) {
+            const waitTime = Math.pow(2, attempt) * 1000
+            await new Promise(resolve => setTimeout(resolve, waitTime))
+            continue
+          }
+        } else {
+          lastError = new Error(`OpenAI API error: ${response.status} - ${errorText}`)
+          break
+        }
+      } else {
+        const data = await response.json()
+        const content = data.choices[0]?.message?.content?.trim() || ''
+        
+        const summaryMatch = content.match(/SUMMARY:\s*(.+?)(?=TYPE:|$)/s)
+        const typeMatch = content.match(/TYPE:\s*(.+?)$/s)
+        
+        return {
+          summary: summaryMatch?.[1]?.trim() || 'Contract analysis completed',
+          agreementType: typeMatch?.[1]?.trim() || 'Services Agreement'
+        }
+      }
+    } catch (error) {
+      console.error(`Network error getting summary (attempt ${attempt}):`, error)
+      lastError = error instanceof Error ? error : new Error(String(error))
+      
+      if (attempt < maxRetries) {
+        const waitTime = Math.pow(2, attempt) * 1000
+        await new Promise(resolve => setTimeout(resolve, waitTime))
+        continue
       }
     }
+  }
 
-    const data = await response.json()
-    const content = data.choices[0]?.message?.content?.trim() || ''
-    
-    const summaryMatch = content.match(/SUMMARY:\s*(.+?)(?=TYPE:|$)/s)
-    const typeMatch = content.match(/TYPE:\s*(.+?)$/s)
-    
-    return {
-      summary: summaryMatch?.[1]?.trim() || 'Contract analysis completed',
-      agreementType: typeMatch?.[1]?.trim() || 'Services Agreement'
-    }
-  } catch (error) {
-    console.error('Error getting summary and type:', error)
-    return {
-      summary: 'Contract analysis completed',
-      agreementType: 'Services Agreement'
-    }
+  // Fallback if all retries failed
+  console.error('All attempts to get summary failed, using fallback')
+  return {
+    summary: 'Contract analysis completed (OpenAI service temporarily unavailable)',
+    agreementType: 'Services Agreement'
   }
 }

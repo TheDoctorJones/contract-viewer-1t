@@ -286,13 +286,25 @@ export function ChatInterface({ file, onHighlight, onQuery, onCloseChat }: ChatI
       console.log('=== AI RESPONSE ANALYSIS ===')
       console.log('Full AI response:', assistantContent)
 
-      // Extract highlighted text from the AI response
-      const highlightRegex = /<<HIGHLIGHT>>(.*?)<<HIGHLIGHT>>/g
+      // Extract highlighted text from the AI response with improved regex
       const exactTextsToHighlight: string[] = []
-      let match
-
-      while ((match = highlightRegex.exec(assistantContent)) !== null) {
-        exactTextsToHighlight.push(match[1])
+      
+      // Try multiple highlight patterns to handle malformed markers
+      const highlightPatterns = [
+        /<<HIGHLIGHT>>(.*?)<<HIGHLIGHT>>/g,  // Perfect format
+        /<<HIGHLIGHT>>(.*?)(?=<<HIGHLIGHT|$)/g,  // Missing closing marker
+        /<<HIGHLIGHT([^>]*?)>>(.*?)<<HIGHLIGHT>>/g,  // Extra content in opening
+        /"([^"]*\$[^"]*?)"/g  // Quoted monetary amounts as fallback
+      ]
+      
+      for (const pattern of highlightPatterns) {
+        let match
+        while ((match = pattern.exec(assistantContent)) !== null) {
+          const textToHighlight = match[1] || match[2] // Handle different capture groups
+          if (textToHighlight && textToHighlight.length > 3) {
+            exactTextsToHighlight.push(textToHighlight.trim())
+          }
+        }
       }
 
       console.log('Extracted texts to highlight:', exactTextsToHighlight)
@@ -304,8 +316,12 @@ export function ChatInterface({ file, onHighlight, onQuery, onCloseChat }: ChatI
         exactTextsToHighlight.push(...fallbackPhrases)
       }
 
-      // Clean up the display text by removing highlight markers
-      const cleanContent = assistantContent.replace(/<<HIGHLIGHT>>/g, '"')
+      // Clean up the display text by removing all highlight markers
+      const cleanContent = assistantContent
+        .replace(/<<HIGHLIGHT>>/g, '"')
+        .replace(/<<HIGHLIGHT[^>]*?>>/g, '"')
+        .replace(/<<HIGHLIGHT/g, '"')
+      
       setMessages(prev => prev.map(msg => 
         msg.id === assistantMessage.id 
           ? { ...msg, content: cleanContent }
@@ -338,6 +354,13 @@ export function ChatInterface({ file, onHighlight, onQuery, onCloseChat }: ChatI
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setInput(e.target.value)
+  }
+
+  const handleInputFocus = () => {
+    // Show messages when user clicks into the input field (if there are messages to show)
+    if (messages.length > 0 && !isMessagesVisible) {
+      setIsMessagesVisible(true)
+    }
   }
 
   const handleCloseMessages = () => {
@@ -398,6 +421,7 @@ export function ChatInterface({ file, onHighlight, onQuery, onCloseChat }: ChatI
           <Input
             value={input}
             onChange={handleInputChange}
+            onFocus={handleInputFocus}
             placeholder={file ? "Ask about the contract..." : "Upload a contract first"}
             disabled={!file || isLoading}
             className="flex-1"
